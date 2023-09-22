@@ -100,19 +100,6 @@ func createEc2(ctx context.Context, region string, profile string) (string, erro
 		}
 	}
 
-	// if len(keyPair.KeyPairs) == 0 {
-	// 	key, err := ec2Client.CreateKeyPair(ctx, &ec2.CreateKeyPairInput{
-	// 		KeyName: aws.String("sagar"),
-	// 	})
-	// 	if err != nil {
-	// 		return "", fmt.Errorf("Create KeyPair error:  %s", err)
-	// 	}
-	// 	file := os.WriteFile("sagar.pem", []byte(*key.KeyMaterial), 0600)
-	// 	if file != nil {
-	// 		return "", fmt.Errorf("Write KeyPair error:  %s", file)
-	// 	}
-	// }
-
 	// Selecting Image for the Instance
 	imageOutput, err := ec2Client.DescribeImages(ctx, &ec2.DescribeImagesInput{
 		Filters: []types.Filter{
