@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,12 +20,29 @@ func main() {
 		err        error
 	)
 	ctx := context.Background()
-	instanceId, err = createEc2(ctx, "us-east-1", "sagar")
+
+	// Calling createEC2 Function
+	instanceId, err = createEc2(ctx, "us-east-1", "sagar") //us-east-1 is the region where we are going to deploy the instance and sagar is my profile name which is ~/.aws/config
 	if err != nil {
 		log.Fatal(err)
 		os.Exit(1)
 	}
+
+	// Printing Instance ID
 	fmt.Printf("Instance ID is: %s", instanceId)
+
+	// Waiting for istance to get ready
+	time.Sleep(30 * time.Second)
+
+	// Adding IP address
+	ipAdd, ipErr := staticIp(ctx, "us-east-1", "sagar", instanceId)
+	if ipErr != nil {
+		log.Fatal(ipErr)
+		os.Exit(1)
+	}
+
+	// Printing Instance IP
+	fmt.Printf("Instance ID is: %s", ipAdd)
 }
 
 func createEc2(ctx context.Context, region string, profile string) (string, error) {
@@ -146,6 +164,7 @@ func createEc2(ctx context.Context, region string, profile string) (string, erro
 		},
 		BlockDeviceMappings: blockDeviceMappings,
 		TagSpecifications:   tagSpecifications,
+		UserData:            aws.String("c3VkbyBhcHQgdXBkYXRl"), //change this base64 code
 	})
 
 	if err != nil {
@@ -155,5 +174,54 @@ func createEc2(ctx context.Context, region string, profile string) (string, erro
 		return "", fmt.Errorf("Instance output is empty ")
 	}
 
-	return *instance.Instances[0].InstanceId, nil
+	// Instance ID
+	instanceId := *instance.Instances[0].InstanceId
+	return instanceId, nil
+}
+
+func staticIp(ctx context.Context, region string, profile string, instanceId string) (string, error) {
+
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion(region), config.WithSharedConfigProfile(profile))
+	if err != nil {
+		return "", fmt.Errorf("unable to load SDK config, %v", err)
+	}
+	ec2Client := ec2.NewFromConfig(cfg)
+
+	// Allocating static IP address
+	ip, iperr := ec2Client.AllocateAddress(ctx, &ec2.AllocateAddressInput{
+		NetworkBorderGroup: aws.String("us-east-1"),
+		TagSpecifications: []types.TagSpecification{
+			{
+				ResourceType: types.ResourceTypeElasticIp,
+				Tags: []types.Tag{
+					{
+						Key:   aws.String("Name"),
+						Value: aws.String("Sagar"),
+					},
+					{
+						Key:   aws.String("ENV"),
+						Value: aws.String("Learning"),
+					},
+				},
+			},
+		},
+	})
+	if iperr != nil {
+		return "", fmt.Errorf("AllocateAddress IP address error %s", iperr)
+	}
+	if len(*ip.AllocationId) == 0 {
+		return "", fmt.Errorf("AllocationId output is empty ")
+	}
+
+	ipaddressID := *ip.AllocationId
+	fmt.Printf("AllocationId is %s \n", ipaddressID)
+	_, allocateErr := ec2Client.AssociateAddress(ctx, &ec2.AssociateAddressInput{
+		AllocationId:       aws.String(ipaddressID),
+		InstanceId:         aws.String(instanceId),
+		AllowReassociation: aws.Bool(false),
+	})
+	if allocateErr != nil {
+		return "", fmt.Errorf("AssociateAddress IP address error %s", allocateErr)
+	}
+	return *ip.AllocationId, nil
 }
